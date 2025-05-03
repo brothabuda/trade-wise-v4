@@ -165,21 +165,22 @@ const CustomTimerInput: React.FC = () => {
   
   useEffect(() => {
     saveSettings({
+      ...savedSettings,
       hours,
       minutes,
       seconds,
-      isRecurring,
+      isRecurring: true,
       selectedSound,
       soundRepeatCount,
       reminders
     });
-  }, [hours, minutes, seconds, isRecurring, selectedSound, soundRepeatCount, reminders, saveSettings]);
+  }, [hours, minutes, seconds, selectedSound, soundRepeatCount, reminders, saveSettings, savedSettings]);
   
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const totalSeconds = (hours * 3600) + (minutes * 60) + seconds;
     if (totalSeconds > 0) {
-      startTimer(totalSeconds, 'custom', isRecurring);
+      startTimer(totalSeconds, 'custom', true);
     }
   };
 
@@ -325,20 +326,6 @@ const CustomTimerInput: React.FC = () => {
               )}
             </div>
           </div>
-        </div>
-        
-        <div className="flex items-center justify-center space-x-2">
-          <input
-            type="checkbox"
-            id="recurring"
-            checked={isRecurring}
-            onChange={(e) => setIsRecurring(e.target.checked)}
-            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-          />
-          <label htmlFor="recurring" className="text-sm text-gray-700 dark:text-gray-300 flex items-center space-x-1">
-            <Repeat className="h-4 w-4" />
-            <span>Repeat timer</span>
-          </label>
         </div>
         
         <button

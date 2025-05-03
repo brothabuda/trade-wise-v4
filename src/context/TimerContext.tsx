@@ -86,7 +86,7 @@ const defaultSettings: TimerSettings = {
   hours: 0,
   minutes: 5,
   seconds: 0,
-  isRecurring: false,
+  isRecurring: true,
   selectedSound: '/Chimes.mp3',
   soundRepeatCount: 1,
   reminders: [],
@@ -200,11 +200,30 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       .sort((a, b) => a.order - b.order);
     
     if (activeReminders.length > 0) {
-      setShowReminder(true);
       setCurrentReminderIndex(prevIndex => {
-        const nextIndex = (prevIndex + 1) % activeReminders.length;
+        const safeIndex = Math.min(prevIndex, activeReminders.length - 1);
+        const nextIndex = (safeIndex + 1) % activeReminders.length;
         return nextIndex;
       });
+      setShowReminder(true);
+    } else {
+      setCurrentReminderIndex(0);
+      setShowReminder(false);
+    }
+  };
+
+  const advanceReminderIndex = () => {
+    const activeReminders = reminders.filter(r => r.isActive && !r.completedAt)
+      .sort((a, b) => a.order - b.order);
+    
+    if (activeReminders.length > 0) {
+      setCurrentReminderIndex(prevIndex => {
+        const safeIndex = Math.min(prevIndex, activeReminders.length - 1);
+        const nextIndex = (safeIndex + 1) % activeReminders.length;
+        return nextIndex;
+      });
+    } else {
+      setCurrentReminderIndex(0);
     }
   };
 
@@ -370,11 +389,9 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     
     // Show reminder if we have active reminders
     if (hasActiveReminders) {
+      // Don't reset to first reminder, advance to next one for cycling
+      advanceReminderIndex();
       setShowReminder(true);
-      setCurrentReminderIndex(prevIndex => {
-        const nextIndex = (prevIndex + 1) % activeReminders.length;
-        return nextIndex;
-      });
     }
     
     // Show emotional tracker if tracking is enabled and set to timer mode
@@ -384,23 +401,18 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       emotionalTrackerPendingRef.current = false;
     }
     
-    // Handle timer reset for recurring timers
-    if (isRecurring) {
-      setSeconds(initialSeconds);
-      setStatus('running');
-      const newSession: TimerSession = {
-        id: crypto.randomUUID(),
-        duration: initialSeconds,
-        preset: preset
-      };
-      setCurrentSession(newSession);
-      setSessions(prev => [...prev, newSession]);
-    } else {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-      setStatus('completed');
-    }
+    console.log('Sequence complete, resetting timer with:', initialSeconds);
+    
+    // Always reset the timer (always recurring)
+    setSeconds(initialSeconds);
+    setStatus('running');
+    const newSession: TimerSession = {
+      id: crypto.randomUUID(),
+      duration: initialSeconds,
+      preset: preset
+    };
+    setCurrentSession(newSession);
+    setSessions(prev => [...prev, newSession]);
   };
 
   const stopSound = () => {
@@ -419,6 +431,7 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   useEffect(() => {
     if (status === 'running' && seconds > 0) {
+      console.log('Setting up timer interval, seconds:', seconds);
       intervalRef.current = window.setInterval(() => {
         setSeconds(prev => {
           if (prev <= 1) {
@@ -431,20 +444,26 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 prev.map(s => s.id === updatedSession.id ? updatedSession : s)
               );
             }
+            console.log('Timer completed, playing bell sequence');
             playBellSequence();
             return 0;
           }
           return prev - 1;
         });
       }, 1000);
+    } else if (status === 'running' && seconds === 0) {
+      // When we hit zero, make sure we restart the timer if we're in running state
+      console.log('Timer at zero but status is running, restarting timer with:', initialSeconds);
+      setSeconds(initialSeconds);
     }
     
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
     };
-  }, [status, seconds, currentSession]);
+  }, [status, seconds, currentSession, initialSeconds]);
 
   const startTimer = (time: number, presetType: TimerPreset = 'custom', recurring: boolean = false) => {
     if (intervalRef.current) {
@@ -456,7 +475,7 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setInitialSeconds(time);
     setStatus('running');
     setPreset(presetType);
-    setIsRecurring(recurring);
+    setIsRecurring(true);
     setCurrentReminderIndex(0);
     setShowReminder(false);
     setShowEmotionalTracker(false);
@@ -516,7 +535,6 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setSeconds(0);
     setInitialSeconds(0);
     setCurrentSession(null);
-    setIsRecurring(false);
     setShowReminder(false);
     setShowEmotionalTracker(false);
     setCurrentReminderIndex(0);
@@ -564,6 +582,9 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setShowReminder(false);
     // Also close emotional tracker if it's showing
     setShowEmotionalTracker(false);
+    
+    // Always advance to the next reminder for next time, but don't show it yet
+    advanceReminderIndex();
   };
 
   return (

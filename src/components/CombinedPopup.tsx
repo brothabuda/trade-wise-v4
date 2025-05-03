@@ -18,6 +18,8 @@ const CombinedPopup: React.FC = () => {
     .sort((a, b) => a.order - b.order);
   
   const currentReminder = activeReminders[currentReminderIndex];
+  const totalReminders = activeReminders.length;
+  const reminderPosition = totalReminders > 0 ? currentReminderIndex + 1 : 0;
   
   // Add animation effect
   useEffect(() => {
@@ -40,8 +42,24 @@ const CombinedPopup: React.FC = () => {
       <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4 transition-all duration-300 ${isVisible ? 'opacity-100 transform scale-100' : 'opacity-0 transform scale-95'}`}>
         {/* Reminder Section */}
         <div className="mb-8 border-b dark:border-gray-700 pb-6">
-          <h3 className="text-xl font-medium mb-4 text-gray-900 dark:text-white">Reminder</h3>
-          <p className="text-lg text-gray-700 dark:text-gray-200 text-center mb-4">
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="text-xl font-medium text-gray-900 dark:text-white">Reminder</h3>
+            <div className="flex items-center space-x-2">
+              <span className="text-sm text-gray-500 dark:text-gray-400">
+                {reminderPosition} of {totalReminders}
+              </span>
+              <div className="flex space-x-1">
+                {Array.from({ length: totalReminders }).map((_, index) => (
+                  <div 
+                    key={index} 
+                    className={`w-2 h-2 rounded-full ${index === currentReminderIndex ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-600'}`}
+                    aria-label={index === currentReminderIndex ? 'Current reminder' : `Reminder ${index + 1}`}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+          <p className="text-lg text-gray-700 dark:text-gray-200 text-center">
             {currentReminder.text}
           </p>
         </div>
