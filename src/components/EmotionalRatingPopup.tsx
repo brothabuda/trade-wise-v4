@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTimer } from '../context/TimerContext';
 
 interface EmotionalRatingPopupProps {
@@ -8,6 +8,16 @@ interface EmotionalRatingPopupProps {
 const EmotionalRatingPopup: React.FC<EmotionalRatingPopupProps> = ({ onDismiss }) => {
   const { addEmotionalRating } = useTimer();
   const [rating, setRating] = useState(5);
+  const [isVisible, setIsVisible] = useState(false);
+
+  // Add animation effect
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsVisible(true);
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   const handleSubmit = () => {
     addEmotionalRating(rating);
@@ -15,8 +25,8 @@ const EmotionalRatingPopup: React.FC<EmotionalRatingPopupProps> = ({ onDismiss }
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-40">
+      <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4 transition-all duration-300 ${isVisible ? 'opacity-100 transform scale-100' : 'opacity-0 transform scale-95'}`}>
         <h3 className="text-xl font-medium mb-4 text-gray-900 dark:text-white">How emotionally reactive are you feeling right now?</h3>
         
         <div className="space-y-5">

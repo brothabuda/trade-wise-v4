@@ -21,8 +21,8 @@ const TimerDashboard: React.FC = () => {
             <TimerControls />
             {status === 'idle' && <CustomTimerInput />}
           </div>
-          <MindfulnessPrompt />
           <EmotionalTracker />
+          <MindfulnessPrompt />
         </div>
         <div className="md:col-span-1">
           <SessionHistory />
@@ -33,7 +33,7 @@ const TimerDashboard: React.FC = () => {
         <ReminderPopup />
       )}
       
-      {showEmotionalTracker && (
+      {showEmotionalTracker && !showReminder && (
         <EmotionalRatingPopup
           onDismiss={() => setShowEmotionalTracker(false)}
         />

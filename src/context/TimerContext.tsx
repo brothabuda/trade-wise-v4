@@ -69,6 +69,7 @@ interface TimerContextType {
   currentReminderIndex: number;
   showReminder: boolean;
   setShowReminder: (show: boolean) => void;
+  handleReminderDismiss: () => void;
   trackEmotionalReactivity: boolean;
   setTrackEmotionalReactivity: (value: boolean) => void;
   emotionalTrackingInterval: 'timer' | 'custom';
@@ -125,6 +126,7 @@ const TimerContext = createContext<TimerContextType>({
   currentReminderIndex: 0,
   showReminder: false,
   setShowReminder: () => {},
+  handleReminderDismiss: () => {},
   trackEmotionalReactivity: false,
   setTrackEmotionalReactivity: () => {},
   emotionalTrackingInterval: 'timer',
@@ -191,6 +193,7 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const soundPlayCountRef = useRef(0);
   const bellSequenceTimeoutRef = useRef<number | null>(null);
   const emotionalTrackingIntervalRef = useRef<number | null>(null);
+  const emotionalTrackerPendingRef = useRef(false);
 
   const showNextReminder = () => {
     const activeReminders = reminders.filter(r => r.isActive && !r.completedAt)
@@ -359,10 +362,33 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const handleSequenceComplete = () => {
-    showNextReminder();
-    if (trackEmotionalReactivity && emotionalTrackingInterval === 'timer') {
-      setShowEmotionalTracker(true);
+    // Check if we have active reminders
+    const activeReminders = reminders.filter(r => r.isActive && !r.completedAt)
+      .sort((a, b) => a.order - b.order);
+    
+    const hasActiveReminders = activeReminders.length > 0;
+    
+    // If we have reminders, show them first
+    if (hasActiveReminders) {
+      setShowReminder(true);
+      setCurrentReminderIndex(prevIndex => {
+        const nextIndex = (prevIndex + 1) % activeReminders.length;
+        return nextIndex;
+      });
+      
+      // If we also need to show emotional tracker, set a flag to show it after reminder is dismissed
+      if (trackEmotionalReactivity && emotionalTrackingInterval === 'timer') {
+        // Store this in a ref so we can check it when reminder is dismissed
+        emotionalTrackerPendingRef.current = true;
+      }
+    } else {
+      // No reminders, show emotional tracker immediately if needed
+      if (trackEmotionalReactivity && emotionalTrackingInterval === 'timer') {
+        setShowEmotionalTracker(true);
+      }
     }
+    
+    // Handle timer reset for recurring timers
     if (isRecurring) {
       setSeconds(initialSeconds);
       setStatus('running');
@@ -537,6 +563,17 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     localStorage.setItem('timerSettings', JSON.stringify(updatedSettings));
   };
 
+  // Add a handler for when reminder is dismissed
+  const handleReminderDismiss = () => {
+    setShowReminder(false);
+    
+    // Check if we should show the emotional tracker next
+    if (emotionalTrackerPendingRef.current) {
+      setShowEmotionalTracker(true);
+      emotionalTrackerPendingRef.current = false;
+    }
+  };
+
   return (
     <TimerContext.Provider
       value={{
@@ -570,6 +607,7 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         currentReminderIndex,
         showReminder,
         setShowReminder,
+        handleReminderDismiss,
         trackEmotionalReactivity,
         setTrackEmotionalReactivity,
         emotionalTrackingInterval,

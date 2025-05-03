@@ -3,7 +3,7 @@ import { Check } from 'lucide-react';
 import { useTimer } from '../context/TimerContext';
 
 const ReminderPopup: React.FC = () => {
-  const { reminders, currentReminderIndex, setShowReminder } = useTimer();
+  const { reminders, currentReminderIndex, handleReminderDismiss } = useTimer();
   
   const activeReminders = reminders.filter(r => r.isActive && !r.completedAt)
     .sort((a, b) => a.order - b.order);
@@ -20,7 +20,7 @@ const ReminderPopup: React.FC = () => {
         </p>
         <div className="flex justify-center">
           <button
-            onClick={() => setShowReminder(false)}
+            onClick={handleReminderDismiss}
             className="flex items-center space-x-2 px-6 py-2 bg-[#4CAF50] hover:bg-[#45a049] text-white rounded-lg transition-colors duration-200 shadow-sm"
           >
             <Check className="h-5 w-5" />
