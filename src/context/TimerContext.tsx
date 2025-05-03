@@ -368,24 +368,20 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     
     const hasActiveReminders = activeReminders.length > 0;
     
-    // If we have reminders, show them first
+    // Show reminder if we have active reminders
     if (hasActiveReminders) {
       setShowReminder(true);
       setCurrentReminderIndex(prevIndex => {
         const nextIndex = (prevIndex + 1) % activeReminders.length;
         return nextIndex;
       });
-      
-      // If we also need to show emotional tracker, set a flag to show it after reminder is dismissed
-      if (trackEmotionalReactivity && emotionalTrackingInterval === 'timer') {
-        // Store this in a ref so we can check it when reminder is dismissed
-        emotionalTrackerPendingRef.current = true;
-      }
-    } else {
-      // No reminders, show emotional tracker immediately if needed
-      if (trackEmotionalReactivity && emotionalTrackingInterval === 'timer') {
-        setShowEmotionalTracker(true);
-      }
+    }
+    
+    // Show emotional tracker if tracking is enabled and set to timer mode
+    if (trackEmotionalReactivity && emotionalTrackingInterval === 'timer') {
+      setShowEmotionalTracker(true);
+      // No longer need the pending flag since both will show at once
+      emotionalTrackerPendingRef.current = false;
     }
     
     // Handle timer reset for recurring timers
@@ -563,15 +559,11 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     localStorage.setItem('timerSettings', JSON.stringify(updatedSettings));
   };
 
-  // Add a handler for when reminder is dismissed
+  // Update the handler for when reminder is dismissed
   const handleReminderDismiss = () => {
     setShowReminder(false);
-    
-    // Check if we should show the emotional tracker next
-    if (emotionalTrackerPendingRef.current) {
-      setShowEmotionalTracker(true);
-      emotionalTrackerPendingRef.current = false;
-    }
+    // Also close emotional tracker if it's showing
+    setShowEmotionalTracker(false);
   };
 
   return (

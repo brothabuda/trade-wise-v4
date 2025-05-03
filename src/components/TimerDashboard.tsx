@@ -7,10 +7,21 @@ import CustomTimerInput from './CustomTimerInput';
 import ReminderPopup from './ReminderPopup';
 import EmotionalTracker from './EmotionalTracker';
 import EmotionalRatingPopup from './EmotionalRatingPopup';
+import CombinedPopup from './CombinedPopup';
 import { useTimer } from '../context/TimerContext';
 
 const TimerDashboard: React.FC = () => {
-  const { status, showReminder, setShowReminder, showEmotionalTracker, setShowEmotionalTracker } = useTimer();
+  const { 
+    status, 
+    showReminder, 
+    setShowReminder, 
+    showEmotionalTracker, 
+    setShowEmotionalTracker,
+    trackEmotionalReactivity
+  } = useTimer();
+  
+  // Determine when to show the combined popup
+  const showCombinedPopup = showReminder && showEmotionalTracker && trackEmotionalReactivity;
   
   return (
     <div className="max-w-3xl mx-auto">
@@ -29,15 +40,14 @@ const TimerDashboard: React.FC = () => {
         </div>
       </div>
       
-      {showReminder && (
-        <ReminderPopup />
-      )}
+      {/* Show Combined Popup when both reminder and emotional tracking are needed */}
+      {showCombinedPopup && <CombinedPopup />}
       
-      {showEmotionalTracker && !showReminder && (
-        <EmotionalRatingPopup
-          onDismiss={() => setShowEmotionalTracker(false)}
-        />
-      )}
+      {/* Show regular Reminder Popup when only reminder is needed */}
+      {showReminder && !showCombinedPopup && <ReminderPopup />}
+      
+      {/* Show regular Emotional Rating Popup when only emotional tracking is needed */}
+      {showEmotionalTracker && !showReminder && <EmotionalRatingPopup onDismiss={() => setShowEmotionalTracker(false)} />}
     </div>
   );
 };
