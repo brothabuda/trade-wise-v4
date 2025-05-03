@@ -18,7 +18,7 @@ const MindfulnessPrompt: React.FC = () => {
   };
   
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 mb-6">
+    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6">
       <div className="flex items-center mb-3">
         <BrainCircuit className="h-5 w-5 mr-2 text-teal-600 dark:text-teal-400" />
         <h3 className="text-lg font-medium">Mindfulness Prompt</h3>

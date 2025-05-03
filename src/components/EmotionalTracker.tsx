@@ -13,7 +13,7 @@ const EmotionalTracker: React.FC = () => {
   } = useTimer();
 
   return (
-    <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center space-x-2">
           <Brain className="h-5 w-5 text-purple-600 dark:text-purple-400" />

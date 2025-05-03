@@ -15,8 +15,8 @@ const TimerDashboard: React.FC = () => {
   return (
     <div className="max-w-3xl mx-auto">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-2">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6 mb-6">
+        <div className="md:col-span-2 space-y-6">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6">
             <TimerDisplay />
             <TimerControls />
             {status === 'idle' && <CustomTimerInput />}
