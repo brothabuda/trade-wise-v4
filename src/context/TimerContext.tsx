@@ -356,6 +356,15 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [status, trackEmotionalReactivity, emotionalTrackingInterval, customTrackingMinutes]);
 
   const playBellSequence = () => {
+    // Show reminder immediately when the bell sequence starts
+    const activeReminders = reminders.filter(r => r.isActive && !r.completedAt)
+      .sort((a, b) => a.order - b.order); // Ensure consistent order if needed here, though index is king
+    
+    if (activeReminders.length > 0) {
+      // currentReminderIndex is already appropriately set (0 by startTimer, or advanced by handleReminderDismiss)
+      setShowReminder(true);
+    }
+
     if (!audioRef.current) {
       audioRef.current = new Audio(selectedSound);
     }
@@ -381,38 +390,41 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const handleSequenceComplete = () => {
-    // Check if we have active reminders
-    const activeReminders = reminders.filter(r => r.isActive && !r.completedAt)
-      .sort((a, b) => a.order - b.order);
+    // Check if we have active reminders (original filter for reference, but setShowReminder is removed)
+    // const activeReminders = reminders.filter(r => r.isActive && !r.completedAt)
+    //   .sort((a, b) => a.order - b.order);
+    // const hasActiveReminders = activeReminders.length > 0;
     
-    const hasActiveReminders = activeReminders.length > 0;
-    
-    // Show reminder if we have active reminders
-    if (hasActiveReminders) {
-      // Don't reset to first reminder, advance to next one for cycling
-      advanceReminderIndex();
-      setShowReminder(true);
-    }
+    // Reminder is now shown at the start of playBellSequence.
+    // This function is now primarily for handling post-bell sequence actions like emotional tracking and timer reset.
     
     // Show emotional tracker if tracking is enabled and set to timer mode
     if (trackEmotionalReactivity && emotionalTrackingInterval === 'timer') {
       setShowEmotionalTracker(true);
-      // No longer need the pending flag since both will show at once
       emotionalTrackerPendingRef.current = false;
     }
     
-    console.log('Sequence complete, resetting timer with:', initialSeconds);
-    
-    // Always reset the timer (always recurring)
-    setSeconds(initialSeconds);
-    setStatus('running');
-    const newSession: TimerSession = {
-      id: crypto.randomUUID(),
-      duration: initialSeconds,
-      preset: preset
-    };
-    setCurrentSession(newSession);
-    setSessions(prev => [...prev, newSession]);
+    if (isRecurring) {
+      console.log('Sequence complete, recurring: resetting timer with:', initialSeconds);
+      setSeconds(initialSeconds);
+      setStatus('running');
+      const newSession: TimerSession = {
+        id: crypto.randomUUID(),
+        duration: initialSeconds,
+        preset: preset // preset from the original timer start
+      };
+      setCurrentSession(newSession);
+      setSessions(prev => [...prev, newSession]);
+    } else {
+      console.log('Sequence complete, not recurring: stopping timer.');
+      // Timer is not recurring, so it should stop and show as completed.
+      // setSeconds(0); // Already 0 when playBellSequence was called
+      setStatus('completed'); // Or 'idle' - 'completed' seems more accurate first
+      // setCurrentSession(null); // The session just completed, retain it for history until a new timer starts or reset.
+      // To make it fully idle for UI, one might also call parts of stopTimer() logic here,
+      // but let's keep it simple: status 'completed', seconds 0.
+      // If another timer is started, startTimer() will correctly reset state.
+    }
   };
 
   const stopSound = () => {
@@ -440,8 +452,8 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
                 ...currentSession,
                 completedAt: new Date()
               };
-              setSessions(prev => 
-                prev.map(s => s.id === updatedSession.id ? updatedSession : s)
+              setSessions(prevSessions => 
+                prevSessions.map(s => s.id === updatedSession.id ? updatedSession : s)
               );
             }
             console.log('Timer completed, playing bell sequence');
@@ -451,11 +463,9 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           return prev - 1;
         });
       }, 1000);
-    } else if (status === 'running' && seconds === 0) {
-      // When we hit zero, make sure we restart the timer if we're in running state
-      console.log('Timer at zero but status is running, restarting timer with:', initialSeconds);
-      setSeconds(initialSeconds);
-    }
+    } 
+    // REMOVED THE else if (status === 'running' && seconds === 0) block that was causing premature timer resets.
+    // The timer is now correctly reset only by handleSequenceComplete after all bells.
     
     return () => {
       if (intervalRef.current) {
