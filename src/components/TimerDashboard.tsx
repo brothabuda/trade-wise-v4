@@ -1,8 +1,6 @@
 import React from 'react';
 import TimerDisplay from './TimerDisplay';
 import TimerControls from './TimerControls';
-import MindfulnessPrompt from './MindfulnessPrompt';
-import SessionHistory from './SessionHistory';
 import CustomTimerInput from './CustomTimerInput';
 import ReminderPopup from './ReminderPopup';
 import EmotionalTracker from './EmotionalTracker';
@@ -26,19 +24,15 @@ const TimerDashboard: React.FC = () => {
   
   return (
     <div className="max-w-3xl mx-auto">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-2 space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
+        <div className="md:col-span-1 space-y-6">
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md p-6">
             <TimerDisplay />
             <TimerControls />
             {status === 'idle' && <CustomTimerInput />}
           </div>
           {status === 'idle' && <ReminderSettingsCard />}
-          <EmotionalTracker />
-          <MindfulnessPrompt />
-        </div>
-        <div className="md:col-span-1">
-          <SessionHistory />
+          {status === 'idle' && <EmotionalTracker />}
         </div>
       </div>
       

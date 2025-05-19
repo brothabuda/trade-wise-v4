@@ -30,7 +30,7 @@ interface TimerSettings {
   activeReminderIds: string[];
   trackEmotionalReactivity: boolean;
   emotionalTrackingInterval: 'timer' | 'custom';
-  customTrackingMinutes: number;
+  customTrackingRingCount: number;
 }
 
 interface TimerSession {
@@ -76,8 +76,8 @@ interface TimerContextType {
   setTrackEmotionalReactivity: (value: boolean) => void;
   emotionalTrackingInterval: 'timer' | 'custom';
   setEmotionalTrackingInterval: (interval: 'timer' | 'custom') => void;
-  customTrackingMinutes: number;
-  setCustomTrackingMinutes: (minutes: number) => void;
+  customTrackingRingCount: number;
+  setCustomTrackingRingCount: (count: number) => void;
   showEmotionalTracker: boolean;
   setShowEmotionalTracker: (show: boolean) => void;
   emotionalRatings: EmotionalRating[];
@@ -100,7 +100,7 @@ const defaultSettings: TimerSettings = {
   activeReminderIds: [],
   trackEmotionalReactivity: false,
   emotionalTrackingInterval: 'timer',
-  customTrackingMinutes: 5
+  customTrackingRingCount: 1
 };
 
 const TimerContext = createContext<TimerContextType>({
@@ -139,8 +139,8 @@ const TimerContext = createContext<TimerContextType>({
   setTrackEmotionalReactivity: () => {},
   emotionalTrackingInterval: 'timer',
   setEmotionalTrackingInterval: () => {},
-  customTrackingMinutes: 5,
-  setCustomTrackingMinutes: () => {},
+  customTrackingRingCount: 1,
+  setCustomTrackingRingCount: () => {},
   showEmotionalTracker: false,
   setShowEmotionalTracker: () => {},
   emotionalRatings: [],
@@ -155,7 +155,7 @@ const TimerContext = createContext<TimerContextType>({
 
 export const useTimer = () => useContext(TimerContext);
 
-export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export default function TimerProvider({ children }: { children: React.ReactNode }) {
   const [seconds, setSeconds] = useState(0);
   const [status, setStatus] = useState<TimerStatus>('idle');
   const [preset, setPreset] = useState<TimerPreset>('custom');
@@ -181,10 +181,22 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (!saved) return defaultSettings;
       
       const parsedSettings = JSON.parse(saved);
+      // Ensure customTrackingRingCount is loaded or defaulted
+      const customTrackingRingCount = typeof parsedSettings.customTrackingRingCount === 'number' 
+        ? parsedSettings.customTrackingRingCount 
+        : defaultSettings.customTrackingRingCount;
+      if (parsedSettings.customTrackingMinutes !== undefined && typeof parsedSettings.customTrackingRingCount !== 'number') {
+        // Migrate from old customTrackingMinutes if present and new field is not
+        // This is a basic migration, could be more sophisticated
+        console.log('Migrating customTrackingMinutes to customTrackingRingCount');
+      }
+
       return {
         ...defaultSettings,
         ...parsedSettings,
         activeReminderIds: Array.isArray(parsedSettings.activeReminderIds) ? parsedSettings.activeReminderIds : [],
+        customTrackingRingCount: customTrackingRingCount,
+        customTrackingMinutes: undefined // Ensure old field is not carried over
       };
     } catch (error) {
       console.error('Failed to parse saved settings:', error);
@@ -198,7 +210,9 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [activeReminderIdsState, setActiveReminderIdsState] = useState<string[]>(savedSettings.activeReminderIds);
   const [trackEmotionalReactivity, _setTrackEmotionalReactivity] = useState(savedSettings.trackEmotionalReactivity);
   const [emotionalTrackingInterval, _setEmotionalTrackingInterval] = useState<'timer' | 'custom'>(savedSettings.emotionalTrackingInterval);
-  const [customTrackingMinutes, _setCustomTrackingMinutes] = useState(savedSettings.customTrackingMinutes);
+  const [customTrackingRingCount, _setCustomTrackingRingCount] = useState(savedSettings.customTrackingRingCount);
+
+  const [sessionRingCountForTracker, setSessionRingCountForTracker] = useState(0);
 
   const [reminderBank, setReminderBank] = useState<BankedReminder[]>(() => {
     try {
@@ -240,6 +254,7 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const soundPlayCountRef = useRef(0);
   const bellSequenceTimeoutRef = useRef<number | null>(null);
   const emotionalTrackingIntervalRef = useRef<number | null>(null);
+  const reminderWasJustSetToShowRef = useRef(false);
 
   const advanceReminderIndex = () => {
     const availableReminders = activeSessionReminders
@@ -348,8 +363,8 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (settings.emotionalTrackingInterval !== undefined) {
         _setEmotionalTrackingInterval(settings.emotionalTrackingInterval);
       }
-      if (settings.customTrackingMinutes !== undefined) {
-        _setCustomTrackingMinutes(settings.customTrackingMinutes);
+      if (settings.customTrackingRingCount !== undefined) {
+        _setCustomTrackingRingCount(settings.customTrackingRingCount);
       }
     } catch (error) {
       console.error('Failed to save settings:', error);
@@ -383,34 +398,17 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
   }, [selectedSound]);
 
-  useEffect(() => {
-    if (status === 'running' && trackEmotionalReactivity && emotionalTrackingInterval === 'custom') {
-      const intervalMs = customTrackingMinutes * 60 * 1000;
-      emotionalTrackingIntervalRef.current = window.setInterval(() => {
-        setShowEmotionalTracker(true);
-      }, intervalMs);
-
-      return () => {
-        if (emotionalTrackingIntervalRef.current) {
-          clearInterval(emotionalTrackingIntervalRef.current);
-        }
-      };
-    }
-  }, [status, trackEmotionalReactivity, emotionalTrackingInterval, customTrackingMinutes]);
-
   const playBellSequence = () => {
     const activeSystemReminders = activeSessionReminders.filter(r => r.isActive && !r.completedAt);
-    let reminderWasSetToShow = false;
 
     if (activeSystemReminders.length > 0) {
       setShowReminder(true);
-      reminderWasSetToShow = true;
+      reminderWasJustSetToShowRef.current = true;
+    } else {
+      reminderWasJustSetToShowRef.current = false;
     }
     
-    // Show emotional tracker ONLY IF no reminder was just displayed as part of this sequence start.
-    if (trackEmotionalReactivity && emotionalTrackingInterval === 'timer' && !reminderWasSetToShow) {
-      setShowEmotionalTracker(true);
-    }
+    // DO NOT show emotional tracker here directly. It will be handled in handleSequenceComplete or handleReminderDismiss.
 
     if (!audioRef.current) {
       audioRef.current = new Audio(selectedSound);
@@ -440,9 +438,31 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const handleSequenceComplete = () => {
-    // Reminder display is handled by playBellSequence.
-    // Emotional Tracker display is handled by playBellSequence (if no reminder) or handleReminderDismiss (if reminder was shown).
-    // This function now primarily focuses on timer recurrence.
+    let currentRingCount = sessionRingCountForTracker;
+    let shouldShowTracker = false;
+    let resetRingCountBecauseShown = false;
+
+    if (trackEmotionalReactivity) {
+      if (emotionalTrackingInterval === 'custom') {
+        currentRingCount += 1;
+        setSessionRingCountForTracker(currentRingCount);
+        if (currentRingCount >= customTrackingRingCount) {
+          shouldShowTracker = true;
+          resetRingCountBecauseShown = true;
+        }
+      } else if (emotionalTrackingInterval === 'timer') {
+        shouldShowTracker = true;
+      }
+    }
+
+    if (reminderWasJustSetToShowRef.current) {
+      reminderWasJustSetToShowRef.current = false;
+    } else if (shouldShowTracker) {
+      setShowEmotionalTracker(true);
+      if (resetRingCountBecauseShown) {
+        setSessionRingCountForTracker(0);
+      }
+    }
     
     // Timer Recurrence Logic
     if (isRecurring) {
@@ -452,13 +472,18 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const newSession: TimerSession = {
         id: crypto.randomUUID(),
         duration: initialSeconds,
-        preset: preset // preset from the original timer start
+        preset: preset, // preset from the original timer start
       };
       setCurrentSession(newSession);
       setSessions(prev => [...prev, newSession]);
     } else {
       console.log('Sequence complete, not recurring: stopping timer.');
       setStatus('completed');
+      // If not recurring, and custom tracking was on but didn't meet count (and tracker wasn't shown for other reasons)
+      // reset the ring count for the next explicit timer start.
+      if (trackEmotionalReactivity && emotionalTrackingInterval === 'custom' && !resetRingCountBecauseShown && !shouldShowTracker) {
+        setSessionRingCountForTracker(0);
+      }
     }
   };
 
@@ -515,6 +540,8 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       clearInterval(intervalRef.current);
     }
     stopSound();
+    setSessionRingCountForTracker(0);
+    reminderWasJustSetToShowRef.current = false;
     
     setSeconds(time);
     setInitialSeconds(time);
@@ -527,12 +554,12 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setActiveSessionReminders(prevReminders =>
       prevReminders.map(r => ({ ...r, completedAt: undefined }))
     );
-    setCurrentReminderIndex(0); // Explicitly reset index here too for fresh start
+    setCurrentReminderIndex(0);
     
     const newSession: TimerSession = {
       id: crypto.randomUUID(),
       duration: time,
-      preset: presetType
+      preset: presetType,
     };
     
     setCurrentSession(newSession);
@@ -565,6 +592,7 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       clearInterval(emotionalTrackingIntervalRef.current);
     }
     stopSound();
+    reminderWasJustSetToShowRef.current = false;
     setSeconds(initialSeconds);
     setStatus('running');
     setShowReminder(false);
@@ -573,7 +601,7 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setActiveSessionReminders(prevReminders =>
       prevReminders.map(r => ({ ...r, completedAt: undefined }))
     );
-    setCurrentReminderIndex(0); // Explicitly reset index here too for fresh start
+    setCurrentReminderIndex(0);
   };
 
   const stopTimer = () => {
@@ -584,6 +612,7 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       clearInterval(emotionalTrackingIntervalRef.current);
     }
     stopSound();
+    reminderWasJustSetToShowRef.current = false;
     setStatus('idle');
     setSeconds(0);
     setInitialSeconds(0);
@@ -591,11 +620,12 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setShowReminder(false);
     setShowEmotionalTracker(false);
     setCurrentReminderIndex(0);
+    setSessionRingCountForTracker(0);
 
     setActiveSessionReminders(prevReminders =>
       prevReminders.map(r => ({ ...r, completedAt: undefined }))
     );
-    setCurrentReminderIndex(0); // Explicitly reset index here too for fresh start
+    setCurrentReminderIndex(0);
   };
 
   const setCustomTime = (hours: number, minutes: number, seconds: number) => {
@@ -624,12 +654,13 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     localStorage.setItem('timerSettings', JSON.stringify(updatedSettings));
   };
 
-  const setCustomTrackingMinutes = (minutes: number) => {
-    const validMinutes = Math.max(1, Math.min(60, minutes || 1));
-    _setCustomTrackingMinutes(validMinutes);
+  const setCustomTrackingRingCount = (count: number) => {
+    const validCount = Math.max(1, Math.min(99, count || 1)); // Allow up to 99 rings
+    _setCustomTrackingRingCount(validCount);
     const updatedSettings = {
       ...savedSettings,
-      customTrackingMinutes: validMinutes
+      customTrackingRingCount: validCount,
+      customTrackingMinutes: undefined // Ensure old field is removed if settings are saved
     };
     setSavedSettings(updatedSettings);
     localStorage.setItem('timerSettings', JSON.stringify(updatedSettings));
@@ -638,13 +669,29 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Update the handler for when reminder is dismissed
   const handleReminderDismiss = () => {
     setShowReminder(false);
-    
-    // If emotional tracking per timer is on, and we just dismissed a reminder, show the tracker now.
-    if (trackEmotionalReactivity && emotionalTrackingInterval === 'timer') {
-      setShowEmotionalTracker(true);
-    }
-    
     advanceReminderIndex();
+
+    let shouldShowTracker = false;
+    let resetRingCountBecauseShown = false;
+
+    if (trackEmotionalReactivity) {
+      const currentRingCount = sessionRingCountForTracker; 
+      if (emotionalTrackingInterval === 'timer') {
+        shouldShowTracker = true;
+      } else if (emotionalTrackingInterval === 'custom') {
+        if (currentRingCount >= customTrackingRingCount) {
+          shouldShowTracker = true;
+          resetRingCountBecauseShown = true;
+        }
+      }
+    }
+
+    if (shouldShowTracker) {
+      setShowEmotionalTracker(true);
+      if (resetRingCountBecauseShown) {
+        setSessionRingCountForTracker(0);
+      }
+    }
   };
 
   return (
@@ -685,8 +732,8 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setTrackEmotionalReactivity,
         emotionalTrackingInterval,
         setEmotionalTrackingInterval,
-        customTrackingMinutes,
-        setCustomTrackingMinutes,
+        customTrackingRingCount,
+        setCustomTrackingRingCount,
         showEmotionalTracker,
         setShowEmotionalTracker,
         emotionalRatings,
@@ -716,7 +763,6 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           const updatedBank = reminderBank.filter(r => r.id !== id);
           setReminderBank(updatedBank);
           saveReminderBank(updatedBank);
-          // Also remove from activeReminderIds if it was there
           const updatedActiveIds = activeReminderIdsState.filter(activeId => activeId !== id);
           setActiveReminderIdsState(updatedActiveIds);
           saveSettings({ ...savedSettings, activeReminderIds: updatedActiveIds });
@@ -733,4 +779,4 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       {children}
     </TimerContext.Provider>
   );
-};
+}

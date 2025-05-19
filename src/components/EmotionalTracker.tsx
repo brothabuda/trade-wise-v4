@@ -8,8 +8,8 @@ const EmotionalTracker: React.FC = () => {
     setTrackEmotionalReactivity,
     emotionalTrackingInterval,
     setEmotionalTrackingInterval,
-    customTrackingMinutes,
-    setCustomTrackingMinutes
+    customTrackingRingCount,
+    setCustomTrackingRingCount
   } = useTimer();
 
   return (
@@ -58,7 +58,7 @@ const EmotionalTracker: React.FC = () => {
                   onChange={() => setEmotionalTrackingInterval('custom')}
                 />
                 <span className="ml-2">
-                  Custom interval
+                  Custom interval (plays every X timer completions)
                 </span>
               </label>
             </div>
@@ -69,12 +69,12 @@ const EmotionalTracker: React.FC = () => {
               <input
                 type="number"
                 min="1"
-                max="60"
-                value={customTrackingMinutes}
-                onChange={(e) => setCustomTrackingMinutes(Math.max(1, Math.min(60, parseInt(e.target.value) || 1)))}
+                max="99"
+                value={customTrackingRingCount}
+                onChange={(e) => setCustomTrackingRingCount(Math.max(1, Math.min(99, parseInt(e.target.value) || 1)))}
                 className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white"
               />
-              <span>minutes</span>
+              <span>timer completions</span>
             </div>
           )}
         </div>

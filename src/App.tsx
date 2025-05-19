@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { ThemeProvider } from './context/ThemeContext';
-import { TimerProvider } from './context/TimerContext';
+import TimerProvider from './context/TimerContext';
 import Layout from './components/Layout';
 import Home from './pages/Home';
 import Timer from './pages/Timer';
