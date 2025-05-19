@@ -31,6 +31,7 @@ interface TimerSettings {
   trackEmotionalReactivity: boolean;
   emotionalTrackingInterval: 'timer' | 'custom';
   customTrackingRingCount: number;
+  volume: number;
 }
 
 interface TimerSession {
@@ -88,6 +89,8 @@ interface TimerContextType {
   updateReminderInBank: (id: string, newText: string) => void;
   deleteReminderFromBank: (id: string) => void;
   toggleReminderActive: (reminderId: string) => void;
+  volume: number;
+  setVolume: (volume: number) => void;
 }
 
 const defaultSettings: TimerSettings = {
@@ -100,7 +103,8 @@ const defaultSettings: TimerSettings = {
   activeReminderIds: [],
   trackEmotionalReactivity: false,
   emotionalTrackingInterval: 'timer',
-  customTrackingRingCount: 1
+  customTrackingRingCount: 1,
+  volume: 1
 };
 
 const TimerContext = createContext<TimerContextType>({
@@ -151,6 +155,8 @@ const TimerContext = createContext<TimerContextType>({
   updateReminderInBank: () => {},
   deleteReminderFromBank: () => {},
   toggleReminderActive: () => {},
+  volume: 1,
+  setVolume: () => {},
 });
 
 export const useTimer = () => useContext(TimerContext);
@@ -225,6 +231,8 @@ export default function TimerProvider({ children }: { children: React.ReactNode 
   });
 
   const [activeSessionReminders, setActiveSessionReminders] = useState<Reminder[]>([]);
+
+  const [volume, setVolume] = useState(savedSettings.volume);
 
   useEffect(() => {
     const newActiveSessionReminders: Reminder[] = [];
@@ -355,6 +363,7 @@ export default function TimerProvider({ children }: { children: React.ReactNode 
       setSelectedSound(validatedSettings.selectedSound);
       setSoundRepeatCount(validatedSettings.soundRepeatCount);
       setActiveReminderIdsState(validatedSettings.activeReminderIds);
+      setVolume(validatedSettings.volume);
       
       // Use the internal setters directly if needed
       if (settings.trackEmotionalReactivity !== undefined) {
@@ -397,6 +406,13 @@ export default function TimerProvider({ children }: { children: React.ReactNode 
       }
     };
   }, [selectedSound]);
+
+  // Update the audio volume when it changes
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = volume;
+    }
+  }, [volume]);
 
   const playBellSequence = () => {
     const activeSystemReminders = activeSessionReminders.filter(r => r.isActive && !r.completedAt);
@@ -774,6 +790,8 @@ export default function TimerProvider({ children }: { children: React.ReactNode 
           setActiveReminderIdsState(updatedActiveIds);
           saveSettings({ ...savedSettings, activeReminderIds: updatedActiveIds });
         },
+        volume,
+        setVolume,
       }}
     >
       {children}

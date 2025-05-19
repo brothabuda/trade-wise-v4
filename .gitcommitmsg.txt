@@ -1,0 +1,16 @@
+[Fix]: Correct reminder/tracker popup sequence and UI
+
+[Details]:
+- What changed:
+    - `TimerContext.tsx`: Refactored popup presentation logic using a ref to ensure emotional tracker appears only after reminder dismissal or if no reminder was due.
+    - `EmotionalTracker.tsx`: Updated label for custom tracking interval to "Custom interval (plays every X timer completions)".
+    - `TimerDashboard.tsx`: Ensured `EmotionalTracker` settings card is only visible when the timer is idle.
+    - `App.tsx`: Updated `TimerProvider` import for default export.
+- Why it changed:
+    - To fix bug where emotional tracker would show before reminder was dismissed.
+    - To improve clarity of UI text for emotional tracking settings.
+    - To improve UX by hiding irrelevant settings during an active timer.
+- How it changed:
+    - Used `useRef` in `TimerContext.tsx` for more reliable state checking between `playBellSequence` and `handleSequenceComplete`.
+    - Conditional rendering in `TimerDashboard.tsx` based on timer status.
+- Related issues: N/A 

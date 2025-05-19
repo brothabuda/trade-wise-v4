@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useTimer } from '../context/TimerContext';
 import { Clock, Repeat, Volume2 } from 'lucide-react';
 
@@ -39,12 +39,17 @@ const CustomTimerInput: React.FC = () => {
     availableSounds,
     savedSettings,
     saveSettings,
-    activeReminderIds
+    activeReminderIds,
+    volume,
+    setVolume
   } = useTimer();
   
   const [hours, setHours] = useState(savedSettings.hours);
   const [minutes, setMinutes] = useState(savedSettings.minutes);
   const [seconds, setSeconds] = useState(savedSettings.seconds);
+  const [showVolume, setShowVolume] = useState(false);
+  const sliderRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const soundDisplayNames = {
     '/Chimes.mp3': 'Chimes (longer duration sound)',
@@ -62,10 +67,60 @@ const CustomTimerInput: React.FC = () => {
       isRecurring,
       selectedSound,
       soundRepeatCount,
-      activeReminderIds
+      activeReminderIds,
+      volume
     });
-  }, [hours, minutes, seconds, isRecurring, selectedSound, soundRepeatCount, activeReminderIds, saveSettings, savedSettings]);
-  
+  }, [hours, minutes, seconds, isRecurring, selectedSound, soundRepeatCount, activeReminderIds, volume, saveSettings, savedSettings]);
+
+  useEffect(() => {
+    if (!showVolume) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (sliderRef.current && !sliderRef.current.contains(event.target as Node)) {
+        setShowVolume(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showVolume]);
+
+  useEffect(() => {
+    if (selectedSound) {
+      audioRef.current = new Audio(selectedSound);
+      audioRef.current.volume = volume;
+    }
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
+    };
+  }, [selectedSound, volume]);
+
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newVolume = parseFloat(e.target.value);
+    setVolume(newVolume);
+    if (audioRef.current) {
+      audioRef.current.volume = newVolume;
+      // Sound will be played onMouseUp
+    }
+  };
+
+  const playPreviewSound = () => {
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch(err => console.error("Error playing preview sound:", err));
+    }
+  };
+
+  const handleSoundPreviewToggle = () => {
+    setShowVolume(prev => {
+      if (!prev) { // If opening
+        playPreviewSound();
+      }
+      return !prev;
+    });
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const totalSeconds = (hours * 3600) + (minutes * 60) + seconds;
@@ -74,13 +129,57 @@ const CustomTimerInput: React.FC = () => {
     }
   };
 
-  const handleSoundPreview = () => {
-    const audio = new Audio(selectedSound);
-    audio.play().catch(err => console.error('Error playing audio:', err));
-  };
-
   return (
     <div className="mt-8">
+      <div className="space-y-4 mb-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            Timer Sound
+          </label>
+          <div className="flex space-x-2 items-center relative">
+            <select
+              value={selectedSound}
+              onChange={(e) => setSelectedSound(e.target.value)}
+              className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white appearance-none"
+            >
+              {availableSounds.map((sound) => (
+                <option key={sound} value={sound}>
+                  {soundDisplayNames[sound as keyof typeof soundDisplayNames]}
+                </option>
+              ))}
+            </select>
+            <div ref={sliderRef} className="relative">
+              <button
+                type="button"
+                onClick={handleSoundPreviewToggle}
+                className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                aria-label="Preview and adjust volume"
+              >
+                <Volume2 className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+              </button>
+              {showVolume && (
+                <div className="absolute z-10 left-1/2 -translate-x-1/2 bottom-full mb-2 p-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg flex items-center space-x-2">
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    value={volume}
+                    onChange={handleVolumeChange}
+                    onMouseUp={playPreviewSound}
+                    className="w-24 h-2 bg-gray-200 dark:bg-gray-600 rounded-lg appearance-none cursor-pointer"
+                    style={{
+                      background: `linear-gradient(to right, #3B82F6 0%, #3B82F6 ${volume * 100}%, #E5E7EB ${volume * 100}%, #E5E7EB 100%)`
+                    }}
+                  />
+                  <span className="text-xs text-gray-500 dark:text-gray-400 w-8 text-center">{Math.round(volume * 100)}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
       <form onSubmit={handleSubmit} className="flex flex-col space-y-4">
         <div className="flex space-x-2">
           <TimeWheel value={hours} onChange={setHours} max={23} label="Hours" />
@@ -89,33 +188,6 @@ const CustomTimerInput: React.FC = () => {
         </div>
 
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-              Timer Sound
-            </label>
-            <div className="flex space-x-2">
-              <select
-                value={selectedSound}
-                onChange={(e) => setSelectedSound(e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white appearance-none"
-              >
-                {availableSounds.map((sound) => (
-                  <option key={sound} value={sound}>
-                    {soundDisplayNames[sound as keyof typeof soundDisplayNames]}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={handleSoundPreview}
-                className="px-3 py-2 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                aria-label="Preview sound"
-              >
-                <Volume2 className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-              </button>
-            </div>
-          </div>
-
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Number of Rings

@@ -6,7 +6,7 @@ const Home: React.FC = () => {
   return (
     <div className="max-w-4xl mx-auto">
       <div className="text-center mb-12">
-        <h1 className="text-4xl font-bold mb-4">Welcome to TradeWise</h1>
+        <h1 className="text-4xl font-bold mb-4">Welcome to Cool Head</h1>
         <p className="text-xl text-gray-600 dark:text-gray-300">
           Your all-in-one trading companion for maintaining focus and discipline
         </p>
@@ -80,7 +80,7 @@ const Home: React.FC = () => {
       </div>
 
       <div className="mt-12 text-center">
-        <h2 className="text-2xl font-semibold mb-4">Why Use TradeWise?</h2>
+        <h2 className="text-2xl font-semibold mb-4">Why Use Cool Head?</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="p-4">
             <h3 className="text-lg font-medium mb-2">Stay Focused</h3>

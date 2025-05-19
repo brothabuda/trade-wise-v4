@@ -23,7 +23,7 @@ const Header: React.FC = () => {
         <div className="flex items-center justify-between">
           <Link to="/" className="flex items-center space-x-2">
             <Clock className={`h-6 w-6 ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`} />
-            <h1 className="text-xl font-semibold">TradeWise</h1>
+            <h1 className="text-xl font-semibold">Cool Head</h1>
           </Link>
           
           <nav className="hidden md:flex items-center space-x-6">
