@@ -1,15 +1,17 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { formatTime } from '../utils/timerUtils';
+import { TimerStatus, TimerPreset } from '../types/timerTypes';
 
-export type TimerStatus = 'idle' | 'running' | 'paused' | 'completed';
-export type TimerPreset = 'custom';
+export interface BankedReminder {
+  id: string;
+  text: string;
+}
 
-interface Reminder {
+export interface Reminder {
   id: string;
   text: string;
   isActive: boolean;
   order: number;
-  createdAt: number;
   completedAt?: number;
 }
 
@@ -25,7 +27,7 @@ interface TimerSettings {
   isRecurring: boolean;
   selectedSound: string;
   soundRepeatCount: number;
-  reminders: Reminder[];
+  activeReminderIds: string[];
   trackEmotionalReactivity: boolean;
   emotionalTrackingInterval: 'timer' | 'custom';
   customTrackingMinutes: number;
@@ -65,7 +67,7 @@ interface TimerContextType {
   removeReminder: (id: string) => void;
   updateReminder: (id: string, updates: Partial<Reminder>) => void;
   toggleReminderComplete: (id: string) => void;
-  reorderReminders: (reminders: Reminder[]) => void;
+  reorderReminders: (orderedActiveIds: string[]) => void;
   currentReminderIndex: number;
   showReminder: boolean;
   setShowReminder: (show: boolean) => void;
@@ -80,6 +82,12 @@ interface TimerContextType {
   setShowEmotionalTracker: (show: boolean) => void;
   emotionalRatings: EmotionalRating[];
   addEmotionalRating: (rating: number) => void;
+  reminderBank: BankedReminder[];
+  activeReminderIds: string[];
+  addReminderToBank: (text: string) => string | undefined;
+  updateReminderInBank: (id: string, newText: string) => void;
+  deleteReminderFromBank: (id: string) => void;
+  toggleReminderActive: (reminderId: string) => void;
 }
 
 const defaultSettings: TimerSettings = {
@@ -89,7 +97,7 @@ const defaultSettings: TimerSettings = {
   isRecurring: true,
   selectedSound: '/Chimes.mp3',
   soundRepeatCount: 1,
-  reminders: [],
+  activeReminderIds: [],
   trackEmotionalReactivity: false,
   emotionalTrackingInterval: 'timer',
   customTrackingMinutes: 5
@@ -136,7 +144,13 @@ const TimerContext = createContext<TimerContextType>({
   showEmotionalTracker: false,
   setShowEmotionalTracker: () => {},
   emotionalRatings: [],
-  addEmotionalRating: () => {}
+  addEmotionalRating: () => {},
+  reminderBank: [],
+  activeReminderIds: [],
+  addReminderToBank: () => undefined,
+  updateReminderInBank: () => {},
+  deleteReminderFromBank: () => {},
+  toggleReminderActive: () => {},
 });
 
 export const useTimer = () => useContext(TimerContext);
@@ -170,7 +184,7 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return {
         ...defaultSettings,
         ...parsedSettings,
-        reminders: Array.isArray(parsedSettings.reminders) ? parsedSettings.reminders : []
+        activeReminderIds: Array.isArray(parsedSettings.activeReminderIds) ? parsedSettings.activeReminderIds : [],
       };
     } catch (error) {
       console.error('Failed to parse saved settings:', error);
@@ -181,10 +195,43 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [isRecurring, setIsRecurring] = useState(savedSettings.isRecurring);
   const [selectedSound, setSelectedSound] = useState(savedSettings.selectedSound);
   const [soundRepeatCount, setSoundRepeatCount] = useState(savedSettings.soundRepeatCount);
-  const [reminders, setReminders] = useState<Reminder[]>(savedSettings.reminders);
+  const [activeReminderIdsState, setActiveReminderIdsState] = useState<string[]>(savedSettings.activeReminderIds);
   const [trackEmotionalReactivity, _setTrackEmotionalReactivity] = useState(savedSettings.trackEmotionalReactivity);
   const [emotionalTrackingInterval, _setEmotionalTrackingInterval] = useState<'timer' | 'custom'>(savedSettings.emotionalTrackingInterval);
   const [customTrackingMinutes, _setCustomTrackingMinutes] = useState(savedSettings.customTrackingMinutes);
+
+  const [reminderBank, setReminderBank] = useState<BankedReminder[]>(() => {
+    try {
+      const savedBank = localStorage.getItem('reminderBank');
+      return savedBank ? JSON.parse(savedBank) : [];
+    } catch (error) {
+      console.error('Failed to parse reminder bank:', error);
+      return [];
+    }
+  });
+
+  const [activeSessionReminders, setActiveSessionReminders] = useState<Reminder[]>([]);
+
+  useEffect(() => {
+    const newActiveSessionReminders: Reminder[] = [];
+    activeReminderIdsState.forEach((id, index) => {
+      const bankedReminder = reminderBank.find(br => br.id === id);
+      if (bankedReminder) {
+        newActiveSessionReminders.push({
+          id: bankedReminder.id,
+          text: bankedReminder.text,
+          isActive: true, 
+          order: index,   
+          completedAt: undefined 
+        });
+      }
+    });
+    setActiveSessionReminders(newActiveSessionReminders);
+    setCurrentReminderIndex(0); // Reset index when active reminders change
+  }, [reminderBank, activeReminderIdsState]);
+
+  // Temporary placeholder for the derived reminders. This will be replaced.
+  // const reminders: Reminder[] = []; // REMOVE THIS PLACEHOLDER
 
   const availableSounds = ['/Chimes.mp3', '/Crystal.mp3', '/Deep Copper Bell.mp3', '/High Bell.mp3'];
 
@@ -193,36 +240,41 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const soundPlayCountRef = useRef(0);
   const bellSequenceTimeoutRef = useRef<number | null>(null);
   const emotionalTrackingIntervalRef = useRef<number | null>(null);
-  const emotionalTrackerPendingRef = useRef(false);
-
-  const showNextReminder = () => {
-    const activeReminders = reminders.filter(r => r.isActive && !r.completedAt)
-      .sort((a, b) => a.order - b.order);
-    
-    if (activeReminders.length > 0) {
-      setCurrentReminderIndex(prevIndex => {
-        const safeIndex = Math.min(prevIndex, activeReminders.length - 1);
-        const nextIndex = (safeIndex + 1) % activeReminders.length;
-        return nextIndex;
-      });
-      setShowReminder(true);
-    } else {
-      setCurrentReminderIndex(0);
-      setShowReminder(false);
-    }
-  };
 
   const advanceReminderIndex = () => {
-    const activeReminders = reminders.filter(r => r.isActive && !r.completedAt)
+    const availableReminders = activeSessionReminders
+      .filter(r => r.isActive && !r.completedAt)
       .sort((a, b) => a.order - b.order);
-    
-    if (activeReminders.length > 0) {
-      setCurrentReminderIndex(prevIndex => {
-        const safeIndex = Math.min(prevIndex, activeReminders.length - 1);
-        const nextIndex = (safeIndex + 1) % activeReminders.length;
-        return nextIndex;
-      });
+
+    if (availableReminders.length === 0) {
+      setCurrentReminderIndex(0); // Or handle no available reminders scenario
+      return;
+    }
+
+    const currentGlobalReminder = activeSessionReminders[currentReminderIndex];
+    let nextIndexInAvailableList = 0;
+
+    if (currentGlobalReminder && !currentGlobalReminder.completedAt && currentGlobalReminder.isActive) {
+      const currentIndexInAvailableList = availableReminders.findIndex(r => r.id === currentGlobalReminder.id);
+      if (currentIndexInAvailableList !== -1) {
+        nextIndexInAvailableList = (currentIndexInAvailableList + 1) % availableReminders.length;
+      } else {
+        // Current reminder (by index) is not in the available list (e.g. became inactive/completed by other means not reflected immediately in index)
+        // Default to the first available reminder
+        nextIndexInAvailableList = 0;
+      }
     } else {
+      // No current valid reminder (e.g. index points to completed/inactive, or initial state)
+      // Default to the first available reminder
+      nextIndexInAvailableList = 0;
+    }
+    
+    const nextReminderInAvailableList = availableReminders[nextIndexInAvailableList];
+    if (nextReminderInAvailableList) {
+      const nextGlobalIndex = activeSessionReminders.findIndex(r => r.id === nextReminderInAvailableList.id);
+      setCurrentReminderIndex(nextGlobalIndex >= 0 ? nextGlobalIndex : 0);
+    } else {
+      // Should not happen if availableReminders.length > 0
       setCurrentReminderIndex(0);
     }
   };
@@ -231,48 +283,30 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (!text) return;
     if (text.length > 100) text = text.slice(0, 100);
     
-    const newReminder: Reminder = {
-      id: crypto.randomUUID(),
-      text,
-      isActive: true,
-      order: reminders.length,
-      createdAt: Date.now()
-    };
-    
-    const updatedReminders = [...reminders, newReminder];
-    setReminders(updatedReminders);
-    saveSettings({ ...savedSettings, reminders: updatedReminders });
+    console.log('addReminder needs to be updated for reminder bank', text);
   };
 
   const removeReminder = (id: string) => {
-    const updatedReminders = reminders.filter(r => r.id !== id)
-      .map((r, index) => ({ ...r, order: index }));
-    setReminders(updatedReminders);
-    saveSettings({ ...savedSettings, reminders: updatedReminders });
+    console.log('removeReminder needs to be updated for reminder bank', id);
   };
 
   const updateReminder = (id: string, updates: Partial<Reminder>) => {
-    const updatedReminders = reminders.map(r => 
-      r.id === id ? { ...r, ...updates } : r
-    );
-    setReminders(updatedReminders);
-    saveSettings({ ...savedSettings, reminders: updatedReminders });
+    console.log('updateReminder needs to be updated for reminder bank', id, updates);
   };
 
   const toggleReminderComplete = (id: string) => {
-    const reminder = reminders.find(r => r.id === id);
-    if (!reminder) return;
-
-    const updates = {
-      completedAt: reminder.completedAt ? undefined : Date.now()
-    };
-    updateReminder(id, updates);
+    setActiveSessionReminders(prevReminders =>
+      prevReminders.map(r =>
+        r.id === id
+          ? { ...r, completedAt: r.completedAt ? undefined : Date.now() }
+          : r
+      )
+    );
   };
 
-  const reorderReminders = (newOrder: Reminder[]) => {
-    const updatedReminders = newOrder.map((r, index) => ({ ...r, order: index }));
-    setReminders(updatedReminders);
-    saveSettings({ ...savedSettings, reminders: updatedReminders });
+  const reorderReminders = (orderedActiveIds: string[]) => {
+    setActiveReminderIdsState(orderedActiveIds);
+    saveSettings({ ...savedSettings, activeReminderIds: orderedActiveIds });
   };
 
   const addEmotionalRating = (rating: number) => {
@@ -295,8 +329,9 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const saveSettings = (settings: TimerSettings) => {
     try {
       const validatedSettings = {
+        ...defaultSettings,
         ...settings,
-        reminders: Array.isArray(settings.reminders) ? settings.reminders : []
+        activeReminderIds: Array.isArray(settings.activeReminderIds) ? settings.activeReminderIds : [],
       };
       
       localStorage.setItem('timerSettings', JSON.stringify(validatedSettings));
@@ -304,7 +339,7 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setIsRecurring(validatedSettings.isRecurring);
       setSelectedSound(validatedSettings.selectedSound);
       setSoundRepeatCount(validatedSettings.soundRepeatCount);
-      setReminders(validatedSettings.reminders);
+      setActiveReminderIdsState(validatedSettings.activeReminderIds);
       
       // Use the internal setters directly if needed
       if (settings.trackEmotionalReactivity !== undefined) {
@@ -318,6 +353,14 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     } catch (error) {
       console.error('Failed to save settings:', error);
+    }
+  };
+
+  const saveReminderBank = (bank: BankedReminder[]) => {
+    try {
+      localStorage.setItem('reminderBank', JSON.stringify(bank));
+    } catch (error) {
+      console.error('Failed to save reminder bank:', error);
     }
   };
 
@@ -356,13 +399,17 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [status, trackEmotionalReactivity, emotionalTrackingInterval, customTrackingMinutes]);
 
   const playBellSequence = () => {
-    // Show reminder immediately when the bell sequence starts
-    const activeReminders = reminders.filter(r => r.isActive && !r.completedAt)
-      .sort((a, b) => a.order - b.order); // Ensure consistent order if needed here, though index is king
-    
-    if (activeReminders.length > 0) {
-      // currentReminderIndex is already appropriately set (0 by startTimer, or advanced by handleReminderDismiss)
+    const activeSystemReminders = activeSessionReminders.filter(r => r.isActive && !r.completedAt);
+    let reminderWasSetToShow = false;
+
+    if (activeSystemReminders.length > 0) {
       setShowReminder(true);
+      reminderWasSetToShow = true;
+    }
+    
+    // Show emotional tracker ONLY IF no reminder was just displayed as part of this sequence start.
+    if (trackEmotionalReactivity && emotionalTrackingInterval === 'timer' && !reminderWasSetToShow) {
+      setShowEmotionalTracker(true);
     }
 
     if (!audioRef.current) {
@@ -374,8 +421,11 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (soundPlayCountRef.current < soundRepeatCount) {
         soundPlayCountRef.current++;
         if (audioRef.current) {
+          audioRef.current.pause();
           audioRef.current.currentTime = 0;
-          audioRef.current.play().catch(console.error);
+          audioRef.current.play().catch(err => {
+            console.error(`Audio play failed (count ${soundPlayCountRef.current}):`, err);
+          });
         }
         
         if (soundPlayCountRef.current < soundRepeatCount) {
@@ -390,20 +440,11 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const handleSequenceComplete = () => {
-    // Check if we have active reminders (original filter for reference, but setShowReminder is removed)
-    // const activeReminders = reminders.filter(r => r.isActive && !r.completedAt)
-    //   .sort((a, b) => a.order - b.order);
-    // const hasActiveReminders = activeReminders.length > 0;
+    // Reminder display is handled by playBellSequence.
+    // Emotional Tracker display is handled by playBellSequence (if no reminder) or handleReminderDismiss (if reminder was shown).
+    // This function now primarily focuses on timer recurrence.
     
-    // Reminder is now shown at the start of playBellSequence.
-    // This function is now primarily for handling post-bell sequence actions like emotional tracking and timer reset.
-    
-    // Show emotional tracker if tracking is enabled and set to timer mode
-    if (trackEmotionalReactivity && emotionalTrackingInterval === 'timer') {
-      setShowEmotionalTracker(true);
-      emotionalTrackerPendingRef.current = false;
-    }
-    
+    // Timer Recurrence Logic
     if (isRecurring) {
       console.log('Sequence complete, recurring: resetting timer with:', initialSeconds);
       setSeconds(initialSeconds);
@@ -417,13 +458,7 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setSessions(prev => [...prev, newSession]);
     } else {
       console.log('Sequence complete, not recurring: stopping timer.');
-      // Timer is not recurring, so it should stop and show as completed.
-      // setSeconds(0); // Already 0 when playBellSequence was called
-      setStatus('completed'); // Or 'idle' - 'completed' seems more accurate first
-      // setCurrentSession(null); // The session just completed, retain it for history until a new timer starts or reset.
-      // To make it fully idle for UI, one might also call parts of stopTimer() logic here,
-      // but let's keep it simple: status 'completed', seconds 0.
-      // If another timer is started, startTimer() will correctly reset state.
+      setStatus('completed');
     }
   };
 
@@ -485,10 +520,14 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setInitialSeconds(time);
     setStatus('running');
     setPreset(presetType);
-    setIsRecurring(true);
-    setCurrentReminderIndex(0);
+    setIsRecurring(recurring);
     setShowReminder(false);
     setShowEmotionalTracker(false);
+
+    setActiveSessionReminders(prevReminders =>
+      prevReminders.map(r => ({ ...r, completedAt: undefined }))
+    );
+    setCurrentReminderIndex(0); // Explicitly reset index here too for fresh start
     
     const newSession: TimerSession = {
       id: crypto.randomUUID(),
@@ -528,9 +567,13 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     stopSound();
     setSeconds(initialSeconds);
     setStatus('running');
-    setCurrentReminderIndex(0);
     setShowReminder(false);
     setShowEmotionalTracker(false);
+
+    setActiveSessionReminders(prevReminders =>
+      prevReminders.map(r => ({ ...r, completedAt: undefined }))
+    );
+    setCurrentReminderIndex(0); // Explicitly reset index here too for fresh start
   };
 
   const stopTimer = () => {
@@ -548,6 +591,11 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setShowReminder(false);
     setShowEmotionalTracker(false);
     setCurrentReminderIndex(0);
+
+    setActiveSessionReminders(prevReminders =>
+      prevReminders.map(r => ({ ...r, completedAt: undefined }))
+    );
+    setCurrentReminderIndex(0); // Explicitly reset index here too for fresh start
   };
 
   const setCustomTime = (hours: number, minutes: number, seconds: number) => {
@@ -590,10 +638,12 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Update the handler for when reminder is dismissed
   const handleReminderDismiss = () => {
     setShowReminder(false);
-    // Also close emotional tracker if it's showing
-    setShowEmotionalTracker(false);
     
-    // Always advance to the next reminder for next time, but don't show it yet
+    // If emotional tracking per timer is on, and we just dismissed a reminder, show the tracker now.
+    if (trackEmotionalReactivity && emotionalTrackingInterval === 'timer') {
+      setShowEmotionalTracker(true);
+    }
+    
     advanceReminderIndex();
   };
 
@@ -621,10 +671,10 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         availableSounds,
         savedSettings,
         saveSettings,
-        reminders,
-        addReminder,
-        removeReminder,
-        updateReminder,
+        reminders: activeSessionReminders,
+        addReminder: () => console.warn('addReminder on context is deprecated, use addReminderToBank'),
+        removeReminder: () => console.warn('removeReminder on context is deprecated, use deleteReminderFromBank'),
+        updateReminder: () => console.warn('updateReminder on context is deprecated, use updateReminderInBank'),
         toggleReminderComplete,
         reorderReminders,
         currentReminderIndex,
@@ -640,7 +690,44 @@ export const TimerProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         showEmotionalTracker,
         setShowEmotionalTracker,
         emotionalRatings,
-        addEmotionalRating
+        addEmotionalRating,
+        reminderBank,
+        activeReminderIds: activeReminderIdsState,
+        addReminderToBank: (text: string) => {
+          if (!text.trim()) return undefined;
+          const newBankedReminder: BankedReminder = {
+            id: crypto.randomUUID(),
+            text: text.trim(),
+          };
+          const updatedBank = [...reminderBank, newBankedReminder];
+          setReminderBank(updatedBank);
+          saveReminderBank(updatedBank);
+          return newBankedReminder.id;
+        },
+        updateReminderInBank: (id: string, newText: string) => {
+          if (!newText.trim()) return;
+          const updatedBank = reminderBank.map(r => 
+            r.id === id ? { ...r, text: newText.trim() } : r
+          );
+          setReminderBank(updatedBank);
+          saveReminderBank(updatedBank);
+        },
+        deleteReminderFromBank: (id: string) => {
+          const updatedBank = reminderBank.filter(r => r.id !== id);
+          setReminderBank(updatedBank);
+          saveReminderBank(updatedBank);
+          // Also remove from activeReminderIds if it was there
+          const updatedActiveIds = activeReminderIdsState.filter(activeId => activeId !== id);
+          setActiveReminderIdsState(updatedActiveIds);
+          saveSettings({ ...savedSettings, activeReminderIds: updatedActiveIds });
+        },
+        toggleReminderActive: (reminderId: string) => {
+          const updatedActiveIds = activeReminderIdsState.includes(reminderId)
+            ? activeReminderIdsState.filter(id => id !== reminderId)
+            : [...activeReminderIdsState, reminderId];
+          setActiveReminderIdsState(updatedActiveIds);
+          saveSettings({ ...savedSettings, activeReminderIds: updatedActiveIds });
+        },
       }}
     >
       {children}

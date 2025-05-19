@@ -1,5 +1,6 @@
-import { vi } from 'vitest';
+import { vi, afterEach } from 'vitest';
 import '@testing-library/jest-dom';
+import { cleanup } from '@testing-library/react';
 
 // Mock for matchMedia which is required for some components but not available in JSDOM
 Object.defineProperty(window, 'matchMedia', {
@@ -14,4 +15,10 @@ Object.defineProperty(window, 'matchMedia', {
     removeEventListener: vi.fn(),
     dispatchEvent: vi.fn(),
   })),
+});
+
+afterEach(() => {
+  cleanup();          // unmounts every rendered component
+  vi.clearAllTimers(); // stops any setTimeout / setInterval
+  vi.restoreAllMocks();
 });

@@ -8,6 +8,7 @@ import ReminderPopup from './ReminderPopup';
 import EmotionalTracker from './EmotionalTracker';
 import EmotionalRatingPopup from './EmotionalRatingPopup';
 import CombinedPopup from './CombinedPopup';
+import ReminderSettingsCard from './ReminderSettingsCard';
 import { useTimer } from '../context/TimerContext';
 
 const TimerDashboard: React.FC = () => {
@@ -32,6 +33,7 @@ const TimerDashboard: React.FC = () => {
             <TimerControls />
             {status === 'idle' && <CustomTimerInput />}
           </div>
+          {status === 'idle' && <ReminderSettingsCard />}
           <EmotionalTracker />
           <MindfulnessPrompt />
         </div>
